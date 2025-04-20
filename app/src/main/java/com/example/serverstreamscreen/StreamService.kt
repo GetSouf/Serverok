@@ -26,7 +26,7 @@ class StreamService : Service() {
     private var virtualDisplay: VirtualDisplay? = null
     private var imageReader: ImageReader? = null
     private var webSocketClient: WebSocketClient? = null
-    private val WS_URI = "ws://10.0.2.2:8081"
+    private val WS_URI = "ws://62.152.55.56:8081"
     private val TAG = "StreamService"
     private var connectionAttempts = 0
     private val maxConnectionAttempts = 3

@@ -44,7 +44,10 @@ class MainActivity : AppCompatActivity() {
             intent.putExtra("data", data)
             startService(intent)
 
-            Log.d("MainActivity", "StreamService запущен")
+            val touchIntent = Intent(this, TouchService::class.java)
+            startService(touchIntent)
+
+            Log.d("MainActivity", "StreamService и TouchService запущены")
             finish()
         } else {
             Log.e("MainActivity", "Не удалось получить разрешение на захват экрана")
