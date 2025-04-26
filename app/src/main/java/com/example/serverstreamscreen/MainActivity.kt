@@ -44,9 +44,6 @@ class MainActivity : AppCompatActivity() {
             intent.putExtra("data", data)
             startService(intent)
 
-            val touchIntent = Intent(this, TouchService::class.java)
-            startService(touchIntent)
-
             Log.d("MainActivity", "StreamService и TouchService запущены")
             finish()
         } else {
