@@ -115,7 +115,7 @@ class StreamService : Service() {
             val image = it.acquireLatestImage() ?: return@setOnImageAvailableListener
             val bitmap = imageToBitmap(image)
             val stream = ByteArrayOutputStream()
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 50, stream)
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 10, stream)
             val byteArray = stream.toByteArray()
 
             if (webSocketClient?.isOpen == true) {

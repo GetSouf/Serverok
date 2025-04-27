@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">ServerStreamScreen</string>
+    <string name="accessibility_service_description">Service to automate screen capture start</string>
+
 </resources>
