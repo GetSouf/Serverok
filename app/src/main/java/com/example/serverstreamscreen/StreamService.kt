@@ -146,12 +146,18 @@ class StreamService : Service() {
                             val read = audioRecord?.read(buffer, 0, buffer.size) ?: 0
                             if (read > 0 && webSocketClient?.isOpen == true) {
                                 val dataToSend = buffer.copyOf(read)
-                                val header = byteArrayOf(0x02)
-                                val packet = header + dataToSend
-                                webSocketClient?.send(packet)
-                                Log.d(TAG, "Отправка аудио: ${dataToSend.size} байт, первые 10 байт: ${
-                                    dataToSend.take(10).joinToString(", ") { it.toUByte().toString() }
-                                }")
+                                val isNotSilence = dataToSend.any { it != 0.toByte() }
+
+                                if (isNotSilence) {
+                                    val header = byteArrayOf(0x02)
+                                    val packet = header + dataToSend
+                                    webSocketClient?.send(packet)
+                                    Log.d(TAG, "Отправка аудио: ${dataToSend.size} байт, первые 10 байт: ${
+                                        dataToSend.take(10).joinToString(", ") { it.toUByte().toString() }
+                                    }")
+                                } else {
+                                    Log.d(TAG, "Аудио тишина, не отправлено")
+                                }
                             }
                         }
                     }.also { it.start() }
@@ -165,11 +171,11 @@ class StreamService : Service() {
             }
         }
 
-        imageReader = ImageReader.newInstance(720, 1280, PixelFormat.RGBA_8888, 4)
+        imageReader = ImageReader.newInstance(540, 960, PixelFormat.RGBA_8888, 4)
 
         virtualDisplay = mediaProjection?.createVirtualDisplay(
             "StreamDisplay",
-            720, 1280, resources.displayMetrics.densityDpi,
+            540, 960, resources.displayMetrics.densityDpi,
             DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
             imageReader?.surface, null, imageHandler
         )
