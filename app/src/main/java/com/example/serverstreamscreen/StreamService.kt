@@ -3,10 +3,15 @@ package com.example.serverstreamscreen
 import android.app.*
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
+import android.media.AudioAttributes
+import android.media.AudioFormat
+import android.media.AudioPlaybackCaptureConfiguration
+import android.media.AudioRecord
 import android.media.Image
 import android.media.ImageReader
 import android.media.projection.MediaProjection
@@ -14,6 +19,7 @@ import android.media.projection.MediaProjectionManager
 import android.os.*
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import org.java_websocket.client.WebSocketClient
 import org.java_websocket.handshake.ServerHandshake
 import java.io.ByteArrayOutputStream
@@ -32,6 +38,8 @@ class StreamService : Service() {
     private val maxConnectionAttempts = 3
     private lateinit var imageHandlerThread: HandlerThread
     private lateinit var imageHandler: Handler
+    private var audioRecord: AudioRecord? = null
+    private var audioThread: Thread? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -102,6 +110,61 @@ class StreamService : Service() {
             }
         }, imageHandler)
 
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val audioConfig = AudioPlaybackCaptureConfiguration.Builder(mediaProjection!!)
+                .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
+                .addMatchingUsage(AudioAttributes.USAGE_GAME)
+                .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
+                .build()
+
+            val audioFormat = AudioFormat.Builder()
+                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                .setSampleRate(8000)
+                .setChannelMask(AudioFormat.CHANNEL_IN_MONO)
+                .build()
+
+            val bufferSize = AudioRecord.getMinBufferSize(
+                8000,
+                AudioFormat.CHANNEL_IN_STEREO,
+                AudioFormat.ENCODING_PCM_16BIT
+            )
+
+            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO)
+                == PackageManager.PERMISSION_GRANTED) {
+
+                try {
+                    audioRecord = AudioRecord.Builder()
+                        .setAudioFormat(audioFormat)
+                        .setBufferSizeInBytes(bufferSize)
+                        .setAudioPlaybackCaptureConfig(audioConfig)
+                        .build()
+                    audioRecord?.startRecording()
+
+                    audioThread = Thread {
+                        val buffer = ByteArray(bufferSize)
+                        while (!Thread.interrupted()) {
+                            val read = audioRecord?.read(buffer, 0, buffer.size) ?: 0
+                            if (read > 0 && webSocketClient?.isOpen == true) {
+                                val dataToSend = buffer.copyOf(read)
+                                val header = byteArrayOf(0x02)
+                                val packet = header + dataToSend
+                                webSocketClient?.send(packet)
+                                Log.d(TAG, "Отправка аудио: ${dataToSend.size} байт, первые 10 байт: ${
+                                    dataToSend.take(10).joinToString(", ") { it.toUByte().toString() }
+                                }")
+                            }
+                        }
+                    }.also { it.start() }
+                } catch (e: SecurityException) {
+                    Log.e(TAG, "Нет разрешения на RECORD_AUDIO", e)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Ошибка создания AudioRecord: ${e.message}", e)
+                }
+            } else {
+                Log.e(TAG, "RECORD_AUDIO permission not granted")
+            }
+        }
+
         imageReader = ImageReader.newInstance(720, 1280, PixelFormat.RGBA_8888, 4)
 
         virtualDisplay = mediaProjection?.createVirtualDisplay(
@@ -115,11 +178,13 @@ class StreamService : Service() {
             val image = it.acquireLatestImage() ?: return@setOnImageAvailableListener
             val bitmap = imageToBitmap(image)
             val stream = ByteArrayOutputStream()
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 10, stream)
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 50, stream)
             val byteArray = stream.toByteArray()
 
             if (webSocketClient?.isOpen == true) {
-                webSocketClient?.send(byteArray)
+                val header = byteArrayOf(0x01)
+                val packet = header + byteArray
+                webSocketClient?.send(packet)
             }
 
             image.close()
@@ -152,6 +217,13 @@ class StreamService : Service() {
         imageReader?.close()
         mediaProjection?.stop()
         imageHandlerThread.quitSafely()
+
+        audioThread?.interrupt()
+        audioThread = null
+        audioRecord?.stop()
+        audioRecord?.release()
+        audioRecord = null
+
         Log.d(TAG, "StreamService уничтожен")
     }
 }
